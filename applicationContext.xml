@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:jdbc="http://www.springframework.org/schema/jdbc" xmlns:tx="http://www.springframework.org/schema/tx"
+	xmlns:aop="http://www.springframework.org/schema/aop"
+	xsi:schemaLocation="http://www.springframework.org/schema/jdbc http://www.springframework.org/schema/jdbc/spring-jdbc.xsd
+		http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd
+		http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-4.0.xsd
+		http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx-4.0.xsd">
+
+	<context:property-placeholder
+		location="classpath:dbConfig.properties,classpath:ws.properties" />
+	<context:component-scan base-package="com.huang.service"
+		use-default-filters="false">
+		<context:include-filter type="annotation"
+			expression="org.springframework.stereotype.Service" />
+	</context:component-scan>
+	<bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource">
+		<property name="driverClassName" value="${driverClassName}" />
+		<property name="url" value="${url}" />
+		<property name="username" value="${jdbc.username}" />
+		<property name="password" value="${jdbc.password}" />
+	</bean>
+
+	<bean id="sqlSessionFactoryBean" class="org.mybatis.spring.SqlSessionFactoryBean">
+		<property name="dataSource" ref="dataSource" />
+		<property name="configLocation" value="classpath:mybatis-config.xml" />
+	</bean>
+
+	<bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+		<property name="basePackage" value="com.huang.mapper"></property>
+		<property name="sqlSessionFactoryBeanName" value="sqlSessionFactoryBean"></property>
+	</bean>
+	
+	<bean id="loginServerInf" class="com.huang.util.MyWsFactoryBean">
+		<property name="url" value="${login_url}"></property>
+		<property name="t" value="com.huang.server.LoginServerInf"></property>
+	</bean>
+
+	<bean id="addressServerInf.java" class="com.huang.util.MyWsFactoryBean">
+		<property name="url" value="${address_url}"></property>
+		<property name="t" value="com.huang.server.AddressServerInf"></property>
+	</bean>
+
+	<bean id="TestServerInf" class="com.huang.util.MyWsFactoryBean">
+		<property name="url" value="${test_url}"></property>
+		<property name="t" value="com.huang.server.TestServerInf"></property>
+	</bean>
+
+	<!-- 配置数据源事务管理器 -->
+	<bean id="txManager"
+		class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+		<property name="dataSource" ref="dataSource"></property>
+	</bean>
+
+	<!-- 将txManager配置成通知 -->
+	<tx:advice transaction-manager="txManager" id="txAdvice">
+		<!-- 配置要通知的方法 tx:method name="*"给所有方法配置通知 propagation="REQUIRED"配置传播属性 -->
+		<tx:attributes>
+			<tx:method name="*" propagation="REQUIRED" rollback-for="java.lang.Exception" />
+		</tx:attributes>
+	</tx:advice>
+
+	<!-- 配置切面，将通知配到切面上 切面表达式：expression="execution(* com.huang.service.*.*.(..))，配置所有项目下的com.huang.service 
+		下的所有类的所有方法的所有参数 -->
+	<aop:config>
+		<aop:pointcut expression="execution(* com.huang.service.*.*(..))"
+			id="pointcut" />
+		<!-- 将通知配置到切面 -->
+		<aop:advisor advice-ref="txAdvice" pointcut-ref="pointcut" />
+	</aop:config>
+
+	<!-- 配置mq的连接 -->
+	<bean id="targetConnectionFactory" class="org.apache.activemq.ActiveMQConnectionFactory">
+		<property name="brokerURL" value="tcp://localhost:61616" />
+	</bean>
+	<!-- 将mq的连接对象整合到spring的连接里面 -->
+	<bean id="connectionFactory"
+		class="org.springframework.jms.connection.SingleConnectionFactory">
+		<!--产生JMS Connection的ConnectionFactory -->
+		<property name="targetConnectionFactory" ref="targetConnectionFactory" />
+	</bean>
+
+	<!-- spring里面已经封装好了执行消息任务的模板 直接通过模板对象执行方法-->
+	<bean id="jmsTemplate" class="org.springframework.jms.core.JmsTemplate">
+		<property name="connectionFactory" ref="connectionFactory" />
+	</bean>
+	<bean id="queueDestination" class="org.apache.activemq.command.ActiveMQQueue">
+		<constructor-arg value="queue" />
+	</bean>
+	<bean id="topicDestination" class="org.apache.activemq.command.ActiveMQTopic">
+		<constructor-arg value="topic" />
+	</bean>
+
+</beans>
